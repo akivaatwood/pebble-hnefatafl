@@ -1,0 +1,33 @@
+{
+  "author": "Akiva Atwood",
+  "dependencies": {},
+  "keywords": [
+    "pebble-app",
+    "game",
+    "hnefatafl",
+    "board-game"
+  ],
+  "name": "hnefatafl",
+  "version": "1.0.0",
+  "pebble": {
+    "capabilities": [],
+    "displayName": "Hnefatafl",
+    "enableMultiJS": false,
+    "messageKeys": [],
+    "projectType": "native",
+    "sdkVersion": "3",
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "gabbro",
+      "flint"
+    ],
+    "uuid": "4892aed1-b302-461a-9157-5f93c960d21e",
+    "watchapp": {
+      "watchface": false
+    }
+  }
+}
