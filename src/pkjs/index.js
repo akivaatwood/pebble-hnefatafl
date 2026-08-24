@@ -50,7 +50,7 @@ function buildHelpPage() {
     '<li>The king needs four attackers around him on the throne, three beside it, or an opposing pair elsewhere.</li>' +
     '</ul></section>' +
     '<button id="done" type="button">Done</button>' +
-    '<div class="version">Version 1.1.0</div>' +
+    '<div class="version">Version 1.1.1</div>' +
     '</main><script>' +
     'document.getElementById("done").addEventListener("click",function(){' +
     'document.location="pebblejs://close#";' +
