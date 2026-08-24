@@ -660,6 +660,8 @@ static void window_unload(Window *window) {
 
 static void init(void) {
   s_random_state = (uint32_t)time(NULL) ^ 0x5441464CUL;
+  app_message_open(APP_MESSAGE_INBOX_SIZE_MINIMUM,
+                   APP_MESSAGE_OUTBOX_SIZE_MINIMUM);
   s_window = window_create();
   window_set_click_config_provider(s_window, click_config_provider);
   window_set_window_handlers(s_window, (WindowHandlers){
@@ -670,6 +672,7 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  app_message_deregister_callbacks();
   window_destroy(s_window);
 }
 
