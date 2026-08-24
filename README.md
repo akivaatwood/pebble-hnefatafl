@@ -7,6 +7,10 @@ Open the app's settings in the Pebble phone app to choose a board size and view
 a compact controls and rules reference. Changing the size starts a new game;
 the choice is saved on the phone and watch.
 
+The watch also asks for a board size whenever the app starts or a new game is
+requested. Use Up and Down to highlight 7 x 7, 9 x 9, or 11 x 11, then press
+Select to begin.
+
 ## Controls
 
 - **Up / Down:** Cycle through movable pieces or legal destinations.

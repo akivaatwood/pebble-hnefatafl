@@ -39,13 +39,30 @@ static TextLayer *s_help_layer;
 static AppTimer *s_ai_timer;
 static uint8_t s_board[MAX_SQUARE_COUNT];
 static uint8_t s_choices[MAX_SQUARE_COUNT];
+static const uint8_t s_board_size_options[] = {7, 9, 11};
 static uint8_t s_board_size = DEFAULT_BOARD_SIZE;
+static int s_board_size_choice_index = 2;
+static bool s_choosing_board_size;
 static int s_choice_count;
 static int s_choice_index;
 static int s_selected = -1;
 static Turn s_turn;
 static GameState s_game_state;
 static uint32_t s_random_state;
+
+static bool valid_board_size(int size) {
+  return size == 7 || size == 9 || size == 11;
+}
+
+static int board_size_option_index(int size) {
+  int index;
+  for (index = 0; index < (int)ARRAY_LENGTH(s_board_size_options); index += 1) {
+    if (s_board_size_options[index] == size) {
+      return index;
+    }
+  }
+  return 2;
+}
 
 static int square_count(void) {
   return s_board_size * s_board_size;
@@ -235,7 +252,10 @@ static void update_status(void) {
   const char *status;
   const char *help;
 
-  if (s_game_state == GAME_DEFENDERS_WIN) {
+  if (s_choosing_board_size) {
+    status = "BOARD SIZE";
+    help = "Up/Down  Select";
+  } else if (s_game_state == GAME_DEFENDERS_WIN) {
     status = "KING ESCAPES";
     help = "Hold Select: new game";
   } else if (s_game_state == GAME_ATTACKERS_WIN) {
@@ -468,6 +488,28 @@ static void reset_game(void) {
   refresh_choices();
 }
 
+static void begin_new_game(void) {
+  if (s_ai_timer) {
+    app_timer_cancel(s_ai_timer);
+    s_ai_timer = NULL;
+  }
+  s_board_size_choice_index = board_size_option_index(s_board_size);
+  s_choosing_board_size = true;
+  s_selected = -1;
+  s_choice_count = 0;
+  update_status();
+  if (s_board_layer) {
+    layer_mark_dirty(s_board_layer);
+  }
+}
+
+static void start_selected_game(void) {
+  s_board_size = s_board_size_options[s_board_size_choice_index];
+  persist_write_int(PERSIST_KEY_BOARD_SIZE, s_board_size);
+  s_choosing_board_size = false;
+  reset_game();
+}
+
 static GColor board_color(void) {
 #ifdef PBL_COLOR
   return GColorFromRGB(255, 170, 85);
@@ -524,6 +566,32 @@ static void draw_piece(GContext *ctx, GRect rect, Piece piece) {
   }
 }
 
+static void draw_board_size_menu(GContext *ctx, GRect bounds) {
+  static const char *labels[] = {"7 x 7", "9 x 9", "11 x 11"};
+  GFont font = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
+  int item_height = 30;
+  int menu_height = item_height * (int)ARRAY_LENGTH(labels);
+  int origin_y = (bounds.size.h - menu_height) / 2;
+  int index;
+
+  graphics_context_set_fill_color(ctx, GColorWhite);
+  graphics_fill_rect(ctx, bounds, 0, GCornerNone);
+  for (index = 0; index < (int)ARRAY_LENGTH(labels); index += 1) {
+    GRect item = GRect(12, origin_y + index * item_height,
+                       bounds.size.w - 24, item_height);
+    if (index == s_board_size_choice_index) {
+      graphics_context_set_fill_color(ctx, GColorBlack);
+      graphics_fill_rect(ctx, item, 4, GCornersAll);
+      graphics_context_set_text_color(ctx, GColorWhite);
+    } else {
+      graphics_context_set_text_color(ctx, GColorBlack);
+    }
+    graphics_draw_text(ctx, labels[index], font, item,
+                       GTextOverflowModeTrailingEllipsis,
+                       GTextAlignmentCenter, NULL);
+  }
+}
+
 static void board_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
   int cell = bounds.size.w / s_board_size;
@@ -535,6 +603,11 @@ static void board_update_proc(Layer *layer, GContext *ctx) {
   int available_height = bounds.size.h;
   int row;
   int col;
+
+  if (s_choosing_board_size) {
+    draw_board_size_menu(ctx, bounds);
+    return;
+  }
 
 #ifdef PBL_ROUND
   available_width = (available_width * 72) / 100;
@@ -583,6 +656,13 @@ static void board_update_proc(Layer *layer, GContext *ctx) {
 }
 
 static void cycle_choice(int delta) {
+  if (s_choosing_board_size) {
+    int option_count = (int)ARRAY_LENGTH(s_board_size_options);
+    s_board_size_choice_index =
+      (s_board_size_choice_index + delta + option_count) % option_count;
+    layer_mark_dirty(s_board_layer);
+    return;
+  }
   if (s_game_state != GAME_PLAYING || s_turn != TURN_DEFENDERS ||
       s_choice_count <= 0) {
     return;
@@ -608,6 +688,10 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   (void)recognizer;
   (void)context;
 
+  if (s_choosing_board_size) {
+    start_selected_game();
+    return;
+  }
   if (s_game_state != GAME_PLAYING || s_turn != TURN_DEFENDERS) {
     return;
   }
@@ -626,14 +710,16 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 static void select_long_click_handler(ClickRecognizerRef recognizer, void *context) {
   (void)recognizer;
   (void)context;
-  reset_game();
+  begin_new_game();
 }
 
 static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
   (void)recognizer;
   (void)context;
 
-  if (s_selected >= 0 && s_turn == TURN_DEFENDERS) {
+  if (s_choosing_board_size) {
+    window_stack_pop(true);
+  } else if (s_selected >= 0 && s_turn == TURN_DEFENDERS) {
     s_selected = -1;
     refresh_choices();
   } else {
@@ -682,7 +768,7 @@ static void window_load(Window *window) {
                                      bounds.size.h - status_height - help_height));
   layer_set_update_proc(s_board_layer, board_update_proc);
   layer_add_child(root, s_board_layer);
-  reset_game();
+  begin_new_game();
 }
 
 static void window_unload(Window *window) {
@@ -694,10 +780,6 @@ static void window_unload(Window *window) {
   layer_destroy(s_board_layer);
   text_layer_destroy(s_status_layer);
   text_layer_destroy(s_help_layer);
-}
-
-static bool valid_board_size(int size) {
-  return size == 7 || size == 9 || size == 11;
 }
 
 static void inbox_received_handler(DictionaryIterator *iterator, void *context) {
@@ -719,7 +801,10 @@ static void inbox_received_handler(DictionaryIterator *iterator, void *context) 
   persist_write_int(PERSIST_KEY_BOARD_SIZE, board_size);
   if (s_board_size != board_size) {
     s_board_size = (uint8_t)board_size;
-    reset_game();
+    begin_new_game();
+  } else if (s_choosing_board_size) {
+    s_board_size_choice_index = board_size_option_index(board_size);
+    layer_mark_dirty(s_board_layer);
   }
 }
 

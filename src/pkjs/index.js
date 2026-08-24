@@ -81,7 +81,7 @@ function buildHelpPage(boardSize) {
     '<li>The king needs four attackers around him on the throne, three beside it, or an opposing pair elsewhere.</li>' +
     '</ul></section>' +
     '<button id="done" type="button">Done</button>' +
-    '<div class="version">Version 1.2.0</div>' +
+    '<div class="version">Version 1.3.0</div>' +
     '</main><script>' +
     'document.getElementById("done").addEventListener("click",function(){' +
     'var settings={boardSize:parseInt(document.getElementById("board-size").value,10)};' +
