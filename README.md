@@ -3,6 +3,9 @@
 A complete 11 x 11 Hnefatafl game for Pebble watches. You command the king and
 defenders; the watch commands the attackers.
 
+Open the app's settings in the Pebble phone app for a compact controls and
+rules reference.
+
 ## Controls
 
 - **Up / Down:** Cycle through movable pieces or legal destinations.

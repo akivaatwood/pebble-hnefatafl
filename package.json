@@ -8,11 +8,13 @@
     "board-game"
   ],
   "name": "hnefatafl",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "pebble": {
-    "capabilities": [],
+    "capabilities": [
+      "configurable"
+    ],
     "displayName": "Hnefatafl",
-    "enableMultiJS": false,
+    "enableMultiJS": true,
     "messageKeys": [],
     "projectType": "native",
     "sdkVersion": "3",
