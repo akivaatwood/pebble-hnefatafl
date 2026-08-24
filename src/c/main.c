@@ -1,9 +1,12 @@
 #include <pebble.h>
 
-#define BOARD_SIZE 11
-#define SQUARE_COUNT (BOARD_SIZE * BOARD_SIZE)
-#define THRONE_INDEX 60
+#define MAX_BOARD_SIZE 11
+#define MAX_SQUARE_COUNT (MAX_BOARD_SIZE * MAX_BOARD_SIZE)
+#define DEFAULT_BOARD_SIZE 11
+#define PERSIST_KEY_BOARD_SIZE 1
 #define AI_DELAY_MS 450
+
+extern uint32_t MESSAGE_KEY_BOARD_SIZE;
 
 typedef enum {
   PIECE_EMPTY = 0,
@@ -34,8 +37,9 @@ static Layer *s_board_layer;
 static TextLayer *s_status_layer;
 static TextLayer *s_help_layer;
 static AppTimer *s_ai_timer;
-static uint8_t s_board[SQUARE_COUNT];
-static uint8_t s_choices[SQUARE_COUNT];
+static uint8_t s_board[MAX_SQUARE_COUNT];
+static uint8_t s_choices[MAX_SQUARE_COUNT];
+static uint8_t s_board_size = DEFAULT_BOARD_SIZE;
 static int s_choice_count;
 static int s_choice_index;
 static int s_selected = -1;
@@ -43,29 +47,38 @@ static Turn s_turn;
 static GameState s_game_state;
 static uint32_t s_random_state;
 
+static int square_count(void) {
+  return s_board_size * s_board_size;
+}
+
 static int board_index(int row, int col) {
-  return (row * BOARD_SIZE) + col;
+  return (row * s_board_size) + col;
 }
 
 static int row_of(int index) {
-  return index / BOARD_SIZE;
+  return index / s_board_size;
 }
 
 static int col_of(int index) {
-  return index % BOARD_SIZE;
+  return index % s_board_size;
+}
+
+static int throne_index(void) {
+  return board_index(s_board_size / 2, s_board_size / 2);
 }
 
 static bool is_corner(int index) {
-  return index == 0 || index == BOARD_SIZE - 1 ||
-         index == SQUARE_COUNT - BOARD_SIZE || index == SQUARE_COUNT - 1;
+  int count = square_count();
+  return index == 0 || index == s_board_size - 1 ||
+         index == count - s_board_size || index == count - 1;
 }
 
 static bool is_restricted(int index) {
-  return index == THRONE_INDEX || is_corner(index);
+  return index == throne_index() || is_corner(index);
 }
 
 static bool is_hostile_empty_square(int index) {
-  return index >= 0 && index < SQUARE_COUNT &&
+  return index >= 0 && index < square_count() &&
          is_restricted(index) && s_board[index] == PIECE_EMPTY;
 }
 
@@ -91,7 +104,7 @@ static bool step_index(int index, int direction, int *result) {
     case 2: row += 1; break;
     default: col -= 1; break;
   }
-  if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) {
+  if (row < 0 || row >= s_board_size || col < 0 || col >= s_board_size) {
     return false;
   }
   *result = board_index(row, col);
@@ -116,7 +129,7 @@ static bool piece_has_move(int from) {
   return false;
 }
 
-static int collect_destinations(int from, uint8_t destinations[SQUARE_COUNT]) {
+static int collect_destinations(int from, uint8_t destinations[MAX_SQUARE_COUNT]) {
   Piece piece = (Piece)s_board[from];
   int count = 0;
   int direction;
@@ -135,11 +148,11 @@ static int collect_destinations(int from, uint8_t destinations[SQUARE_COUNT]) {
   return count;
 }
 
-static int collect_movable_pieces(Turn turn, uint8_t pieces[SQUARE_COUNT]) {
+static int collect_movable_pieces(Turn turn, uint8_t pieces[MAX_SQUARE_COUNT]) {
   int count = 0;
   int index;
 
-  for (index = 0; index < SQUARE_COUNT; index += 1) {
+  for (index = 0; index < square_count(); index += 1) {
     if (belongs_to_turn((Piece)s_board[index], turn) && piece_has_move(index)) {
       pieces[count++] = (uint8_t)index;
     }
@@ -148,7 +161,7 @@ static int collect_movable_pieces(Turn turn, uint8_t pieces[SQUARE_COUNT]) {
 }
 
 static bool side_supports_capture(Piece mover, int index) {
-  if (index < 0 || index >= SQUARE_COUNT) {
+  if (index < 0 || index >= square_count()) {
     return false;
   }
   return same_side(mover, (Piece)s_board[index]) || is_hostile_empty_square(index);
@@ -170,11 +183,11 @@ static bool king_is_captured(int king_index) {
     }
   }
 
-  if (king_index == THRONE_INDEX) {
+  if (king_index == throne_index()) {
     return hostile_count == 4;
   }
-  if ((adjacent[0] == THRONE_INDEX || adjacent[1] == THRONE_INDEX ||
-       adjacent[2] == THRONE_INDEX || adjacent[3] == THRONE_INDEX)) {
+  if ((adjacent[0] == throne_index() || adjacent[1] == throne_index() ||
+       adjacent[2] == throne_index() || adjacent[3] == throne_index())) {
     return hostile_count == 4;
   }
   return ((adjacent[0] >= 0 && adjacent[2] >= 0 &&
@@ -263,7 +276,7 @@ static int current_choice(void) {
 
 static int find_king(void) {
   int index;
-  for (index = 0; index < SQUARE_COUNT; index += 1) {
+  for (index = 0; index < square_count(); index += 1) {
     if (s_board[index] == PIECE_KING) {
       return index;
     }
@@ -289,7 +302,7 @@ static void execute_move(int from, int to) {
 }
 
 static int attacker_move_score(int from, int to) {
-  uint8_t board_copy[SQUARE_COUNT];
+  uint8_t board_copy[MAX_SQUARE_COUNT];
   int king = find_king();
   int before_distance = king >= 0 ?
     abs(row_of(from) - row_of(king)) + abs(col_of(from) - col_of(king)) : 0;
@@ -322,8 +335,8 @@ static uint32_t next_random(void) {
 }
 
 static bool choose_ai_move(AiMove *best_move) {
-  uint8_t pieces[SQUARE_COUNT];
-  uint8_t destinations[SQUARE_COUNT];
+  uint8_t pieces[MAX_SQUARE_COUNT];
+  uint8_t destinations[MAX_SQUARE_COUNT];
   int piece_count = collect_movable_pieces(TURN_ATTACKERS, pieces);
   int best_score = -32768;
   int tie_count = 0;
@@ -399,31 +412,56 @@ static void place_piece(int row, int col, Piece piece) {
   s_board[board_index(row, col)] = (uint8_t)piece;
 }
 
+static void place_pieces(const uint8_t positions[][2], size_t count,
+                         Piece piece) {
+  size_t index;
+  for (index = 0; index < count; index += 1) {
+    place_piece(positions[index][0], positions[index][1], piece);
+  }
+}
+
 static void reset_game(void) {
-  static const uint8_t attackers[][2] = {
+  static const uint8_t attackers_7[][2] = {
+    {0,3},{1,3},{3,0},{3,1},{3,5},{3,6},{5,3},{6,3}
+  };
+  static const uint8_t defenders_7[][2] = {
+    {2,3},{3,2},{3,4},{4,3}
+  };
+  static const uint8_t attackers_9[][2] = {
+    {0,3},{0,4},{0,5},{1,4},
+    {3,0},{3,8},{4,0},{4,1},{4,7},{4,8},{5,0},{5,8},
+    {7,4},{8,3},{8,4},{8,5}
+  };
+  static const uint8_t defenders_9[][2] = {
+    {2,4},{3,4},{4,2},{4,3},{4,5},{4,6},{5,4},{6,4}
+  };
+  static const uint8_t attackers_11[][2] = {
     {0,3},{0,4},{0,5},{0,6},{0,7},{1,5},
     {3,0},{3,10},{4,0},{4,10},{5,0},{5,1},{5,9},{5,10},
     {6,0},{6,10},{7,0},{7,10},{9,5},
     {10,3},{10,4},{10,5},{10,6},{10,7}
   };
-  static const uint8_t defenders[][2] = {
+  static const uint8_t defenders_11[][2] = {
     {3,5},{4,4},{4,5},{4,6},{5,3},{5,4},
     {5,6},{5,7},{6,4},{6,5},{6,6},{7,5}
   };
-  unsigned int index;
 
   if (s_ai_timer) {
     app_timer_cancel(s_ai_timer);
     s_ai_timer = NULL;
   }
   memset(s_board, PIECE_EMPTY, sizeof(s_board));
-  for (index = 0; index < sizeof(attackers) / sizeof(attackers[0]); index += 1) {
-    place_piece(attackers[index][0], attackers[index][1], PIECE_ATTACKER);
+  if (s_board_size == 7) {
+    place_pieces(attackers_7, ARRAY_LENGTH(attackers_7), PIECE_ATTACKER);
+    place_pieces(defenders_7, ARRAY_LENGTH(defenders_7), PIECE_DEFENDER);
+  } else if (s_board_size == 9) {
+    place_pieces(attackers_9, ARRAY_LENGTH(attackers_9), PIECE_ATTACKER);
+    place_pieces(defenders_9, ARRAY_LENGTH(defenders_9), PIECE_DEFENDER);
+  } else {
+    place_pieces(attackers_11, ARRAY_LENGTH(attackers_11), PIECE_ATTACKER);
+    place_pieces(defenders_11, ARRAY_LENGTH(defenders_11), PIECE_DEFENDER);
   }
-  for (index = 0; index < sizeof(defenders) / sizeof(defenders[0]); index += 1) {
-    place_piece(defenders[index][0], defenders[index][1], PIECE_DEFENDER);
-  }
-  place_piece(5, 5, PIECE_KING);
+  place_piece(s_board_size / 2, s_board_size / 2, PIECE_KING);
   s_turn = TURN_DEFENDERS;
   s_game_state = GAME_PLAYING;
   s_selected = -1;
@@ -488,7 +526,7 @@ static void draw_piece(GContext *ctx, GRect rect, Piece piece) {
 
 static void board_update_proc(Layer *layer, GContext *ctx) {
   GRect bounds = layer_get_bounds(layer);
-  int cell = bounds.size.w / BOARD_SIZE;
+  int cell = bounds.size.w / s_board_size;
   int board_pixels;
   int origin_x;
   int origin_y;
@@ -502,19 +540,19 @@ static void board_update_proc(Layer *layer, GContext *ctx) {
   available_width = (available_width * 72) / 100;
   available_height = (available_height * 86) / 100;
 #endif
-  cell = available_width / BOARD_SIZE;
-  if (cell > available_height / BOARD_SIZE) {
-    cell = available_height / BOARD_SIZE;
+  cell = available_width / s_board_size;
+  if (cell > available_height / s_board_size) {
+    cell = available_height / s_board_size;
   }
-  board_pixels = cell * BOARD_SIZE;
+  board_pixels = cell * s_board_size;
   origin_x = (bounds.size.w - board_pixels) / 2;
   origin_y = (bounds.size.h - board_pixels) / 2;
 
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, bounds, 0, GCornerNone);
 
-  for (row = 0; row < BOARD_SIZE; row += 1) {
-    for (col = 0; col < BOARD_SIZE; col += 1) {
+  for (row = 0; row < s_board_size; row += 1) {
+    for (col = 0; col < s_board_size; col += 1) {
       int index = board_index(row, col);
       GRect square = GRect(origin_x + col * cell,
                            origin_y + row * cell,
@@ -658,10 +696,49 @@ static void window_unload(Window *window) {
   text_layer_destroy(s_help_layer);
 }
 
+static bool valid_board_size(int size) {
+  return size == 7 || size == 9 || size == 11;
+}
+
+static void inbox_received_handler(DictionaryIterator *iterator, void *context) {
+  Tuple *board_size_tuple = dict_find(iterator, MESSAGE_KEY_BOARD_SIZE);
+  (void)context;
+
+  if (!board_size_tuple) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "Settings message missing BOARD_SIZE");
+    return;
+  }
+
+  int board_size = board_size_tuple->value->int32;
+  APP_LOG(APP_LOG_LEVEL_INFO, "Received board size: %d", board_size);
+  if (!valid_board_size(board_size)) {
+    APP_LOG(APP_LOG_LEVEL_WARNING, "Ignoring invalid board size: %d", board_size);
+    return;
+  }
+
+  persist_write_int(PERSIST_KEY_BOARD_SIZE, board_size);
+  if (s_board_size != board_size) {
+    s_board_size = (uint8_t)board_size;
+    reset_game();
+  }
+}
+
+static void inbox_dropped_handler(AppMessageResult reason, void *context) {
+  (void)context;
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Settings message dropped: %d", reason);
+}
+
 static void init(void) {
+  int saved_board_size = persist_read_int(PERSIST_KEY_BOARD_SIZE);
   s_random_state = (uint32_t)time(NULL) ^ 0x5441464CUL;
-  app_message_open(APP_MESSAGE_INBOX_SIZE_MINIMUM,
-                   APP_MESSAGE_OUTBOX_SIZE_MINIMUM);
+  if (valid_board_size(saved_board_size)) {
+    s_board_size = (uint8_t)saved_board_size;
+  }
+  app_message_register_inbox_received(inbox_received_handler);
+  app_message_register_inbox_dropped(inbox_dropped_handler);
+  AppMessageResult message_result = app_message_open(
+    APP_MESSAGE_INBOX_SIZE_MINIMUM, APP_MESSAGE_OUTBOX_SIZE_MINIMUM);
+  APP_LOG(APP_LOG_LEVEL_INFO, "AppMessage opened: %d", message_result);
   s_window = window_create();
   window_set_click_config_provider(s_window, click_config_provider);
   window_set_window_handlers(s_window, (WindowHandlers){

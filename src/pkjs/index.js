@@ -1,4 +1,24 @@
-function buildHelpPage() {
+var BOARD_SIZE_KEY = 'hnefatafl.boardSize';
+var DEFAULT_BOARD_SIZE = 11;
+
+function validBoardSize(size) {
+  return size === 7 || size === 9 || size === 11;
+}
+
+function getBoardSize() {
+  var size = parseInt(localStorage.getItem(BOARD_SIZE_KEY), 10);
+  return validBoardSize(size) ? size : DEFAULT_BOARD_SIZE;
+}
+
+function sendBoardSize(size) {
+  Pebble.sendAppMessage({ BOARD_SIZE: size }, function() {
+    console.log('Sent board size: ' + size);
+  }, function(error) {
+    console.log('Failed to send board size: ' + JSON.stringify(error));
+  });
+}
+
+function buildHelpPage(boardSize) {
   return '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     '<title>Hnefatafl Guide</title>' +
@@ -20,6 +40,10 @@ function buildHelpPage() {
     '.sides{display:grid;grid-template-columns:1fr 1fr;gap:10px;}' +
     '.side{padding:12px;border-radius:10px;background:#17130f;}' +
     '.side b{display:block;color:#e4b967;margin-bottom:4px;}' +
+    'label{display:block;margin-bottom:8px;color:#fff4dc;font-weight:bold;}' +
+    'select{width:100%;padding:12px;background:#17130f;color:#f7ead0;' +
+    'border:1px solid #c99349;border-radius:10px;font:16px Georgia,serif;}' +
+    '.note{margin:9px 0 0;color:#cbb896;font-size:13px;}' +
     'button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:999px;' +
     'background:#e4b967;color:#241a10;font:700 16px Georgia,serif;}' +
     '.version{text-align:center;margin-top:14px;color:#9f8a6c;font-size:12px;}' +
@@ -30,6 +54,13 @@ function buildHelpPage() {
     '<div class="side"><b>You</b>Control the white defenders and their king.</div>' +
     '<div class="side"><b>The Watch</b>Controls the black attackers.</div>' +
     '</div></section>' +
+    '<section class="card"><h2>Game Settings</h2>' +
+    '<label for="board-size">Board size</label>' +
+    '<select id="board-size">' +
+    '<option value="7"' + (boardSize === 7 ? ' selected' : '') + '>7 x 7</option>' +
+    '<option value="9"' + (boardSize === 9 ? ' selected' : '') + '>9 x 9</option>' +
+    '<option value="11"' + (boardSize === 11 ? ' selected' : '') + '>11 x 11</option>' +
+    '</select><p class="note">Changing board size starts a new game.</p></section>' +
     '<section class="card"><h2>Controls</h2><ul>' +
     '<li><strong>Up / Down:</strong> Cycle through movable pieces.</li>' +
     '<li><strong>Select:</strong> Choose the highlighted piece.</li>' +
@@ -50,18 +81,46 @@ function buildHelpPage() {
     '<li>The king needs four attackers around him on the throne, three beside it, or an opposing pair elsewhere.</li>' +
     '</ul></section>' +
     '<button id="done" type="button">Done</button>' +
-    '<div class="version">Version 1.1.2</div>' +
+    '<div class="version">Version 1.2.0</div>' +
     '</main><script>' +
     'document.getElementById("done").addEventListener("click",function(){' +
-    'document.location="pebblejs://close#";' +
+    'var settings={boardSize:parseInt(document.getElementById("board-size").value,10)};' +
+    'document.location="pebblejs://close#"+encodeURIComponent(JSON.stringify(settings));' +
     '});' +
     '</script></body></html>';
 }
 
 Pebble.addEventListener('ready', function() {
   console.log('Hnefatafl phone guide ready');
+  sendBoardSize(getBoardSize());
 });
 
 Pebble.addEventListener('showConfiguration', function() {
-  Pebble.openURL('data:text/html,' + encodeURIComponent(buildHelpPage()));
+  Pebble.openURL('data:text/html,' + encodeURIComponent(buildHelpPage(getBoardSize())));
+});
+
+Pebble.addEventListener('webviewclosed', function(event) {
+  if (!event.response) {
+    return;
+  }
+
+  var settings;
+  try {
+    settings = JSON.parse(decodeURIComponent(event.response));
+  } catch (decodeError) {
+    try {
+      settings = JSON.parse(event.response);
+    } catch (parseError) {
+      console.log('Unable to parse settings: ' + event.response);
+      return;
+    }
+  }
+
+  var boardSize = parseInt(settings.boardSize, 10);
+  if (!validBoardSize(boardSize)) {
+    console.log('Ignoring invalid board size: ' + settings.boardSize);
+    return;
+  }
+  localStorage.setItem(BOARD_SIZE_KEY, String(boardSize));
+  sendBoardSize(boardSize);
 });

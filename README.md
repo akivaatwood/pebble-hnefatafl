@@ -1,10 +1,11 @@
 # Hnefatafl for Pebble
 
-A complete 11 x 11 Hnefatafl game for Pebble watches. You command the king and
-defenders; the watch commands the attackers.
+A complete Hnefatafl game for Pebble watches with 7 x 7, 9 x 9, and 11 x 11
+boards. You command the king and defenders; the watch commands the attackers.
 
-Open the app's settings in the Pebble phone app for a compact controls and
-rules reference.
+Open the app's settings in the Pebble phone app to choose a board size and view
+a compact controls and rules reference. Changing the size starts a new game;
+the choice is saved on the phone and watch.
 
 ## Controls
 
@@ -25,8 +26,8 @@ rules reference.
 - The attackers win if the king is captured or the defenders have no legal
   moves.
 
-The board starts from the common 11 x 11 Hnefatafl arrangement with 24
-attackers, 12 defenders, and the king.
+The 7 x 7 game uses a Brandubh-style layout, the 9 x 9 game uses a
+Tablut-style layout, and the 11 x 11 game keeps the original Hnefatafl layout.
 
 ## Build
 

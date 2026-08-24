@@ -1,6 +1,6 @@
 {
   "name": "hnefatafl-pkjs",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "private": true,
   "main": "index.js"
 }
